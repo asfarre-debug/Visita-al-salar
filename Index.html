@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Visita al salar: simulador de decisión</title>
+<style>
+:root{--bg:#f3f0e8;--sf:#fbfaf6;--tx:#1d2a2e;--mu:#5a6a6e;--ac:#1f6f78;--ac2:#b8862b;--ln:#d6d1c2;--bad:#a8432f;--ok:#2f7a4d;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141c1f;--sf:#1c272b;--tx:#e8eeee;--mu:#9fb0b3;--ac:#5fb7c0;--ac2:#d9a948;--ln:#2e3d42;--bad:#e0806b;--ok:#6cc08a}}
+:root[data-theme="dark"]{--bg:#141c1f;--sf:#1c272b;--tx:#e8eeee;--mu:#9fb0b3;--ac:#5fb7c0;--ac2:#d9a948;--ln:#2e3d42;--bad:#e0806b;--ok:#6cc08a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:17px/1.55 Georgia,"Times New Roman",serif}
+main{max-width:720px;margin:0 auto;padding:20px 16px 48px}
+h1{font:700 26px/1.2 "Trebuchet MS",Verdana,sans-serif;margin:4px 0 2px}
+h2{font:700 20px/1.3 "Trebuchet MS",Verdana,sans-serif;margin:18px 0 8px}
+.sub{color:var(--mu);font-size:15px;margin:0 0 14px}
+.node{font:600 13px "Trebuchet MS",Verdana,sans-serif;color:var(--mu);margin:0 0 6px}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 18px}
+.m{background:var(--sf);border:1px solid var(--ln);border-radius:8px;padding:8px 10px;font:14px "Trebuchet MS",Verdana,sans-serif}
+.m span{display:block;color:var(--mu);font-size:12px}
+.bar{height:6px;background:var(--ln);border-radius:3px;margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ac);transition:width .5s}
+.say{background:var(--sf);border-left:4px solid var(--ac);padding:8px 12px;margin:10px 0;border-radius:0 8px 8px 0}
+.say.r{border-color:var(--ac2)}
+.say b{font:700 14px "Trebuchet MS",Verdana,sans-serif}
+.say p{margin:2px 0 0}
+.scene{font-style:italic;color:var(--mu);margin:10px 0}
+button{font:inherit;cursor:pointer}
+.opt{display:block;width:100%;text-align:left;background:var(--sf);color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:10px 12px;margin:8px 0}
+.opt:hover,.opt:focus-visible{border-color:var(--ac);outline:2px solid var(--ac);outline-offset:1px}
+.go{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 18px;margin-top:10px;font-weight:700}
+.go:disabled{opacity:.45;cursor:not-allowed}
+:root:not([data-theme="light"]) .go{color:#10181a}
+textarea,select{width:100%;font:inherit;background:var(--sf);color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:8px}
+.lib{background:var(--sf);border:1px dashed var(--ac2);border-radius:8px;padding:10px 12px;margin:12px 0}
+.lib b{font:700 14px "Trebuchet MS",Verdana,sans-serif}
+.res{border-top:2px solid var(--ln);margin-top:14px;padding-top:6px}
+.tag{display:inline-block;font:700 12px "Trebuchet MS",Verdana,sans-serif;padding:2px 8px;border-radius:10px;border:1px solid var(--ln);color:var(--mu)}
+.warn{color:var(--bad);font-size:15px;min-height:1.2em}
+table{border-collapse:collapse;width:100%;font-size:15px}
+td,th{border-bottom:1px solid var(--ln);padding:6px 4px;text-align:left;vertical-align:top}
+.wrap{overflow-x:auto}
+@media (max-width:520px){.board{grid-template-columns:1fr 1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+var S,app=document.getElementById("app");
+var ORDER=["intro","d1","d1r","d2","d2r","rain","d3","d3r","d4","d4r","fin","epi"];
+var NODO={intro:"N0 · Llegada",d1:"N1 · Decisión 1",d1r:"N1 · Decisión 1",d2:"N2 · Decisión 2",d2r:"N2 · Decisión 2",rain:"N3 · Lluvia",d3:"N4 · Decisión 3",d3r:"N4 · Decisión 3",d4:"N5 · Decisión 4",d4r:"N5 · Decisión 4",fin:"Final",epi:"N11 · Epílogo"};
+function init(){S={step:"intro",d:{},p:{},li:100,cost:0,salty:false,mg:80,info:false};render()}
+function say(w,t){return '<div class="say '+(w=="r"?"r":"")+'"><b>'+(w=="r"?"Don Ramón, operario":"Profesora Inés")+'</b><p>'+t+'</p></div>'}
+function opt(k,l,t){return '<button class="opt" onclick="pick(\''+k+'\',\''+l+'\')"><b>'+l+')</b> '+t+'</button>'}
+function go(t){return '<button class="go" onclick="next()">'+t+'</button>'}
+function pred(q){return '<div class="lib"><b>Libreta de campo. Predecí antes de decidir:</b><p style="margin:4px 0">'+q+'</p><textarea id="p" rows="2" placeholder="Escribí tu predicción"></textarea><div class="warn" id="warn"></div></div>'}
+function board(){
+ var mg=S.info?(S.d.d3=="B"?"reducido":"alto"):"sin medir";
+ return '<div class="board"><div class="m"><span>Litio disponible</span>'+S.li+' %<div class="bar"><i style="width:'+S.li+'%"></i></div></div>'+
+ '<div class="m"><span>Relación Mg/Li</span>'+mg+'</div>'+
+ '<div class="m"><span>Recursos gastados (agua, reactivos, energía)</span>'+S.cost+' / 10<div class="bar"><i style="width:'+S.cost*10+'%;background:var(--ac2)"></i></div></div></div>'}
+function next(){S.step=ORDER[ORDER.indexOf(S.step)+1];render();window.scrollTo(0,0)}
+function pick(k,l){
+ if(k=="d2"||k=="d4"){var v=(document.getElementById("p").value||"").trim();if(v.length<3){document.getElementById("warn").textContent="Escribí una predicción antes de decidir.";return}S.p[k]=v}
+ S.d[k]=l;
+ if(k=="d1"){S.info=l=="A";S.cost+=l=="A"?1:0}
+ if(k=="d2"){S.li=l=="A"?85:l=="B"?92:58;S.cost+=l=="A"?3:1;if(l=="C")S.salty=true}
+ if(k=="d3"){S.mg=l=="A"?80:15;S.cost+=l=="B"?2:0;if(l=="B")S.li-=3}
+ if(k=="d4"){S.cost+=2}
+ next()}
+function cls(){
+ var h='<div class="lib"><b>Libreta: clasificá las tres muestras</b>';
+ [["Salmuera (frasco)","s"],["Costra blanca del borde","c"],["Polvo «producto»","p"]].forEach(function(x){
+  h+='<p style="margin:8px 0 2px">'+x[0]+'</p><select id="c'+x[1]+'"><option value="">Elegí…</option><option value="su">Sustancia</option><option value="so">Solución (mezcla homogénea)</option><option value="he">Mezcla heterogénea</option></select>'});
+ return h+'<button class="go" onclick="chk()">Comparar con la evidencia</button><div id="cres"></div></div>'}
+function chk(){
+ var ok={cs:"so",cc:"he",cp:"su"},nm={su:"sustancia",so:"solución",he:"mezcla heterogénea"},r="";
+ var lb={cs:"Salmuera",cc:"Costra",cp:"Polvo"};
+ for(var k in ok){var v=document.getElementById(k).value;if(!v){document.getElementById("cres").innerHTML='<p class="warn">Clasificá las tres muestras.</p>';return}
+  r+='<p>'+lb[k]+': '+(v==ok[k]?'<span class="tag" style="color:var(--ok)">coincide</span> ':'<span class="tag" style="color:var(--bad)">revisá</span> ')+'según la evidencia es '+nm[ok[k]]+(S.info?'':' (con tu caracterización rápida era difícil de saber)')+'.</p>'}
+ r+='<p style="color:var(--mu);font-size:15px">El polvo «producto» se trata aquí como sustancia (carbonato de litio). La salmuera es transparente y homogénea, pero tiene muchos componentes: transparente no significa puro. La costra tiene varias fases.</p>';
+ document.getElementById("cres").innerHTML=r;document.getElementById("nx").disabled=false}
+function pur(){var i=S.mg*0.006+(S.d.d4=="A"?0.8:0.05)+(S.salty?0.4:0)+(S.d.d2=="A"?0.1:0);return Math.round((99.95-i)*100)/100}
+function rec(){return Math.round(S.li*(S.d.d4=="A"?0.70:0.92))}
+function fin(){var d=S.d;
+ if(d.d2=="C")return 5;
+ if(d.d3=="B"&&d.d4=="B")return d.d2=="B"?1:3;
+ if(d.d3=="A"&&d.d1=="B")return 4;
+ return 2}
+var FIN={
+1:{t:"El lote que ya podés mostrar",r:"Grado batería con gasto razonable. Cada decisión respondió a cómo se comporta lo que hay en la solución.",q:"Un alumno de secundaria pregunta: «¿Por qué no sacan todo el litio de una vez, sin esperar la evaporación?»",o:[["Porque el litio está mezclado con muchas sales que cristalizan en distinto momento; esperar permite separarlas por etapas.",1],["Porque el sol es gratis y no hay otra forma de hacerlo.",0],["Porque hay que esperar a que se evapore el agua.",0]],q2:"Pasaste por todas las etapas sin quiebres: el punto de transferencia justo y el calor en la precipitación fueron las claves."},
+2:{t:"Vendible, pero no para una batería",r:"El producto sirve para otras industrias, pero queda impureza (magnesio o sales arrastradas) que lo descalifica para baterías.",q:"Un alumno pregunta: «Si el agua del salar es transparente, ¿cómo saben que tiene tantas cosas adentro?»",o:[["Porque se mide: conductividad, residuo al evaporar y análisis de composición muestran lo que la vista no ve.",1],["Porque se ve turbia en los bordes.",0],["Porque si está en el salar debe tener cosas.",0]],q2:"El punto de quiebre estuvo en la remoción del magnesio o en el exceso de reactivo en frío: la impureza no se ve, pero se mide."},
+3:{t:"El lote perfecto que nadie puede pagar",r:"Pureza altísima, pero el gasto en agua, reactivos y energía haría inviable la planta.",q:"Un alumno pregunta: «¿Por qué calentar, si el agua es lo que ya falta?»",o:[["Porque el carbonato de litio es menos soluble en caliente: calentar hace que precipite más y se pierda menos litio en el líquido.",1],["Porque calentar siempre disuelve más.",0],["Porque así se seca más rápido.",0]],q2:"Transferir temprano dejó un volumen grande de salmuera diluida: hubo que compensar con más recursos más adelante."},
+4:{t:"El arrastre silencioso",r:"El producto parecía excelente, pero el análisis final detecta magnesio y lo rechaza.",q:"Un alumno pregunta: «Si el producto se veía bien, ¿por qué lo rechazaron?»",o:[["Porque un polvo blanco puede ser una mezcla: la pureza se mide, no se ve, y una pequeña fracción de impureza ya cambia el grado.",1],["Porque se equivocaron al mirarlo.",0],["Porque el magnesio es más pesado.",0]],q2:"Con la caracterización rápida nunca viste la relación Mg/Li, y dejaste el magnesio sin tratar. Lo que no se mide, no se decide."},
+5:{t:"El litio que se quedó en la costra",r:"Casi todo el litio cristalizó con otras sales en las piletas y fue a descarte. Las etapas siguientes ya no lo recuperan.",q:"Un alumno pregunta: «¿Adónde se fue el litio si no lo vieron desaparecer?»",o:[["Quedó en los sólidos que precipitaron: la masa se conserva, solo cambió de fase y de lugar.",1],["Se evaporó con el agua.",0],["Se transformó en otro elemento.",0]],q2:"Esperar el máximo de concentración parecía más rentable: más litio por litro, pero mucho se perdió en sólidos. Concentración no es cantidad total."}};
+
+function render(){
+ var s=S.step,h='<p class="node">'+NODO[s]+'</p>';
+ if(s=="intro"){h='<h1>Visita al salar</h1><p class="sub">Simulador de decisión para química general: sistemas, sustancias y soluciones</p>'+
+  '<p class="scene">Sos parte de un grupo de estudiantes de profesorado en química que visita la Laguna Seca del Cóndor (salar ficticio, 3.800 m). Los acompaña la profesora Inés y los recibe Don Ramón, operario de la planta. Les van a hacer preguntas en cada etapa: tus respuestas tienen consecuencias que no se pueden deshacer.</p>'+
+  say("i","Chicos, hoy no es una visita para mirar. Don Ramón va a poner decisiones sobre la mesa y ustedes las resuelven. Anoten sus predicciones en la libreta: al final las revisamos.")+
+  say("r","Esto que ven es salmuera: agua que subió desde abajo del salar. Tengo un frasco, un trozo de costra del borde y una bolsita de polvo blanco que dice «producto». Mucho gusto.")+go("Empezar la visita")}
+ else if(s=="d1"){h+=board()+say("r","A ver, profe, usted que enseña: ¿qué es lo que tienen enfrente? Antes de contarles nada, díganme cómo lo averiguarían.")+say("i","Tienen tiempo y presupuesto limitados. Elijan.")+
+  opt("d1","A","<b>Caracterización completa:</b> lupa, densidad, conductividad, evaporar una gota en un vidrio de reloj y filtrar una muestra. Más tiempo y costo.")+opt("d1","B","<b>Caracterización rápida:</b> aspecto y densidad. Barato y veloz.")}
+ else if(s=="d1r"){h+=board();
+  if(S.d.d1=="A")h+='<div class="res"><p>La salmuera es transparente pero deja un <b>residuo blanco</b> al evaporar y <b>conduce muy bien</b> la electricidad. La costra no se disuelve del todo: tiene varias fases. Se te muestra la composición: el <b>magnesio es alto</b> respecto del litio.</p></div>'+say("r","¡Eso! Transparente no quiere decir limpia. Hay muchas cosas disueltas.");
+  else h+='<div class="res"><p>Concluís que la salmuera es «agua salada transparente». Solo tenés aspecto y densidad: no viste la composición ni la relación Mg/Li.</p></div>'+say("i","Una densidad no nos dice cuántos componentes hay. Veamos si la evidencia alcanza para clasificar.");
+  h+=cls()+'<button class="go" id="nx" disabled onclick="next()">Seguir hacia las piletas</button>'}
+ else if(s=="d2"){h+=board()+'<p class="scene">Llegan a las piletas. El sol evapora el agua y aparecen costras blancas en los bordes.</p>'+
+  say("r","Hay que pasar la salmuera a la pileta siguiente, pero no sé cuándo. ¿Ustedes qué dicen?")+say("i","Piensen en lo que sucede con lo disuelto cuando el agua se va.")+
+  pred("¿Qué creés que va a pasar con lo que está disuelto a medida que se evapora el agua?")+
+  opt("d2","A","<b>Transferir temprano:</b> la sal común todavía no precipitó del todo y pasa con la salmuera.")+opt("d2","B","<b>Transferir en el punto justo:</b> la sal común ya precipitó, pero el litio sigue disuelto y lejos del límite de saturación.")+opt("d2","C","<b>Esperar al máximo de concentración:</b> más litio por litro, pero la salmuera está saturada de varias sales a la vez.")}
+ else if(s=="d2r"){h+=board()+'<div class="res"><p>'+({A:"Quedan mucho sodio y cloruro en la salmuera. El litio está poco concentrado y el volumen a procesar es mayor.",B:"La mayor parte de la sal común quedó como sólido en la pileta anterior. El litio se concentró sin perderse: el sistema pasó de homogéneo a heterogéneo y la fase líquida quedó más rica en litio.",C:"Parte del litio <b>acompañó a otras sales al cristalizar</b> y quedó en sólidos que se descartan."})[S.d.d2]+'</p></div>'+
+  say("i","Tu predicción fue: «"+esc(S.p.d2)+"». ¿Coincide con lo que viste?")+say("r","Ojo: más concentrado no siempre es más cantidad. Se vuelve sobre eso.")+go("Seguir")}
+ else if(s=="rain"){
+  if(!S.rainDone){S.rainDone=1;S.li-=S.d.d2=="A"?5:S.d.d2=="B"?2:0}
+  h+=board()+'<p class="scene">Una madrugada las nubes bajan y cae un chaparrón inusual. Las piletas parecen más llenas y las costras de los bordes se ven más pequeñas.</p>'+
+  say("r","Esto es lo que más me gusta mostrarle a quien llega. Miren qué pasó.")+
+  '<div class="res"><p>'+({A:"La salmuera ya estaba diluida y ahora lo está más: se perdió tiempo.",B:"La salmuera se diluye un poco y vuelve a concentrarse en pocos días.",C:"Parte de las sales sólidas <b>se disuelve de nuevo</b>: el sistema heterogéneo vuelve a ser homogéneo y la pureza se complica."})[S.d.d2]+'</p></div>'+
+  say("i","Pregunta de libreta: ¿por qué desaparecieron parte de las costras? ¿Qué pasó con lo que estaba sólido?")+go("Seguir al laboratorio")}
+ else if(s=="d3"){h+=board()+say("i","En el laboratorio, Don Ramón nos muestra una tabla.")+say("r","Con el litio viaja un vecino molesto: el magnesio. Se parece químicamente al litio y complica la separación. ¿Qué hacemos?")+
+  opt("d3","A","<b>Procesar igual:</b> rápido y barato, y confiar en separarlo más adelante.")+opt("d3","B","<b>Agregar un reactivo que forme un sólido con el magnesio y filtrarlo:</b> gasta reactivo y genera un lodo a descartar, pero baja el magnesio disuelto.")+
+  (S.info?'':'<p class="scene">Como no hiciste la caracterización completa, no sabés cuánto magnesio hay.</p>')}
+ else if(s=="d3r"){h+=board()+'<div class="res"><p>'+(S.d.d3=="A"?"El magnesio sigue en la solución y viajará hasta la etapa final.":"Se forma un <b>sólido blanco y gelatinoso</b> que se retira por filtración. La solución queda más limpia: viste un sistema homogéneo volverse heterogéneo y volver a separarse.")+'</p></div>'+say("i","Pregunta de libreta: ¿cuántas fases hay mientras se forma el lodo? ¿Y cuántos componentes en la solución filtrada?")+go("Seguir")}
+ else if(s=="d4"){h+=board()+say("r","Llegó el momento: obtener carbonato de litio sólido desde la solución concentrada.")+say("i","Elijan cómo precipitar.")+
+  pred("¿Es mejor precipitar el carbonato en frío o en caliente? ¿Por qué?")+
+  opt("d4","A","<b>Exceso de reactivo y en frío:</b> sólido rápido y abundante.")+opt("d4","B","<b>Dosis ajustada y calentando:</b> más energía y más tiempo.")}
+ else if(s=="d4r"){h+=board()+'<div class="res"><p>'+(S.d.d4=="A"?"El sólido sale rápido pero arrastra otras sales, y parte del litio queda disuelto en el líquido madre. El carbonato de litio es <b>más soluble en frío</b> que en caliente.":"Precipita más litio y más puro. El calor es un aliado: contradice la regla intuitiva de que «calentar disuelve más».")+'</p></div>'+say("i","Tu predicción: «"+esc(S.p.d4)+"». ¿Qué cambia si la comparás con el resultado?")+go("Ver el análisis final")}
+ else if(s=="fin"){var f=fin(),F=FIN[f],P=pur(),R=rec(),g=P>=99.5?"grado batería":P>=99?"grado técnico":"fuera de especificación";
+  h='<p class="node">Final '+f+'</p><h1>'+F.t+'</h1>'+board()+say("r",F.r)+
+  '<h2>Análisis del lote</h2><p>Pureza: <b>'+P+' %</b> ('+g+'). Litio recuperado: <b>'+R+' %</b> del que entró.</p>'+
+  '<h2>Línea de decisiones</h2><div class="wrap"><table><tr><th>Etapa</th><th>Elegiste</th><th>Predicción</th></tr>'+
+  '<tr><td>Reconocer la muestra</td><td>'+(S.d.d1=="A"?"Completa":"Rápida")+'</td><td>—</td></tr>'+
+  '<tr><td>Piletas</td><td>'+({A:"Temprano",B:"Punto justo",C:"Máxima concentración"})[S.d.d2]+'</td><td>'+esc(S.p.d2)+'</td></tr>'+
+  '<tr><td>Magnesio</td><td>'+(S.d.d3=="A"?"Procesar igual":"Reactivo y filtrado")+'</td><td>—</td></tr>'+
+  '<tr><td>Carbonato</td><td>'+(S.d.d4=="A"?"Exceso en frío":"Dosis ajustada, caliente")+'</td><td>'+esc(S.p.d4)+'</td></tr></table></div>'+
+  '<h2>Punto de quiebre</h2><p>'+F.q2+'</p>'+go("Ir a la pregunta final")}
+ else if(s=="epi"){var F=FIN[fin()];
+  h='<p class="node">N11 · Epílogo</p><h1>Ahora enseñás vos</h1>'+say("i","Cuando seas docente, alguien te va a preguntar justamente esto. ¿Cómo lo explicarías?")+'<p class="scene">'+F.q+'</p><div id="opts">'+
+  F.o.map(function(o,i){return '<button class="opt" onclick="ans('+i+')">'+o[0]+'</button>'}).join("")+'</div><div id="fb"></div>'}
+ app.innerHTML=h}
+function ans(i){var F=FIN[fin()],o=F.o[i];
+ document.getElementById("fb").innerHTML=(o[1]?'<p><b style="color:var(--ok)">Explicación sólida.</b> Usa el concepto químico y es accesible para un adolescente.</p>':'<p><b style="color:var(--bad)">Revisala.</b> Esa respuesta repite una concepción frecuente o queda incompleta. Probá con la opción que apoye la explicación en lo que viste en el salar: fases, saturación, solubilidad y medición.</p>')+
+ '<p class="sub">Si querés, probá de nuevo con otras decisiones: otro camino lleva a otro final.</p><button class="go" onclick="init()">Reiniciar la visita</button>'}
+function esc(t){return String(t||"").replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
+init();
+</script>
+</body>
+</html>
